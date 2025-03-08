@@ -4,6 +4,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
+const fileRouter = require("./routes/fileRouters");
 
 const app = express();
 
@@ -12,6 +13,7 @@ connectDB();
 app.use(cors());
 app.use(bodyParser.json());
 app.use("/api/auth", authRoutes);
+app.use("/api/file", fileRouter);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server chạy trên cổng ${PORT}`));
