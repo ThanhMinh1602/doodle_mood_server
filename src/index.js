@@ -1,58 +1,39 @@
-require("dotenv").config();
+require("dotenv").config(); // Load biến môi trường
+
 const express = require("express");
+const morgan = require("morgan");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const connectDB = require("./config/db");
+const http = require("http");
+const connectDB = require("./config/db"); 
+const { initSocket } = require("./services/socketService"); // Import socket
 const authRoutes = require("./routes/authRoutes");
 const fileRouter = require("./routes/fileRouters");
+const userRouter = require("./routes/userRouter");
+const friendRouter = require("./routes/frendRouter");
 
 const app = express();
 
+// Kết nối database
 connectDB();
 
+// Middleware
+app.use(morgan("combined")); 
 app.use(cors());
 app.use(bodyParser.json());
+
+// Routes API
 app.use("/api/auth", authRoutes);
 app.use("/api/file", fileRouter);
+app.use("/api/user", userRouter);
+app.use("/api/friend", friendRouter);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server chạy trên cổng ${PORT}`));
+// Tạo server HTTP
+const server = http.createServer(app);
 
-// const express = require("express");
-// const http = require("http");
-// const socketIo = require("socket.io");
-// const cors = require("cors");
- 
-// const app = express();
-// app.use(cors());
+// Khởi tạo socket
+initSocket(server);
 
-// const server = http.createServer(app);
-// const io = socketIo(server, {
-//     cors: { origin: "*" }
-// });
-
-// let drawingData = [];
-
-// io.on("connection", (socket) => {
-//     console.log("User connected:", socket.id);
-
-//     // Gửi dữ liệu vẽ hiện tại cho user mới
-//     socket.emit("loadDrawing", drawingData);
-
-//     // Khi người dùng vẽ
-//     socket.on("draw", (data) => {
-//         drawingData.push(data);
-//         socket.broadcast.emit("draw", data);
-//     });
-//     socket.on("clear", () => {
-//         drawingData = [];
-//         io.emit("loadDrawing", drawingData);
-//     });
-
-//     // Khi user ngắt kết nối
-//     socket.on("disconnect", () => {
-//         console.log("User disconnected:", socket.id);
-//     });
-// });
-
-// server.listen(3000, () => console.log("✅ Server running on port 3000"));
+// Lắng nghe cổng
+const PORT =  3000;
+server.listen(PORT, () => console.log(`🚀 Server chạy trên cổng ${PORT}`));

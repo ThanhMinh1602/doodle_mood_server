@@ -50,7 +50,7 @@ async function uploadFileToDrive(filePath, fileName) {
             downloadLink: result.data.webContentLink,
         };
     } catch (error) {
-        console.error("❌ Upload error:", error);
+        console.error("Upload error:", error);
         return { success: false, error: error.message };
     }
 }
@@ -87,7 +87,7 @@ exports.uploadFile = async (req, res) => {
             await newImage.save();
             return res.json({ success: true, message: "Upload thành công!", image: newImage });
         } catch (error) {
-            console.error("❌ Lỗi khi lưu vào MongoDB:", error);
+            console.error("Lỗi khi lưu vào MongoDB:", error);
             return res.status(500).json({ success: false, message: "Lỗi khi lưu vào DB" });
         }
     } else {
@@ -101,7 +101,7 @@ exports.getImages = async (req, res) => {
 
         res.json({ success: true, images });
     } catch (error) {
-        console.error("❌ Lỗi khi lấy danh sách hình ảnh:", error);
+        console.error("Lỗi khi lấy danh sách hình ảnh:", error);
         res.status(500).json({ success: false, message: "Lỗi server!" });
     }
 };
@@ -124,7 +124,7 @@ exports.getImagesByDrive = async (req, res) => {
 
         res.json({ success: true, images });
     } catch (error) {
-        console.error("❌ Lỗi khi lấy danh sách hình ảnh:", error);
+        console.error("Lỗi khi lấy danh sách hình ảnh:", error);
         res.status(500).json({ success: false, message: "Lỗi server!" });
     }
 
