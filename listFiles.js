@@ -56,7 +56,6 @@ async function deleteAllImages() {
     }
 }
 
+deleteAllImages();
 listFiles();
 
-// 📌 Gọi hàm xóa tất cả ảnh
-// deleteAllImages();

@@ -1,56 +1,52 @@
 const socketIo = require("socket.io");
+const Message = require("../models/messages")
 
 let io;
-const connectedUsers = {}; // Lưu trữ userId -> socketId
-
-const initSocket = (server) => {
+const users = new Map(); // Lưu socketId theo userId
+function initSocket(server) {
     io = socketIo(server, {
         cors: {
             origin: "*",
-            methods: ["GET", "POST"],
-        },
+        }
     });
 
     io.on("connection", (socket) => {
-        console.log("🔗 Người dùng đã kết nối:", socket.id);
+        console.log("🟢 Người dùng kết nối:", socket.id);
 
-        // Khi user đăng nhập, lưu userId và socketId
-        socket.on("user_connected", (userId) => {
-            connectedUsers[userId] = socket.id;
-            console.log(`✅ User ${userId} đã kết nối với socket ${socket.id}`);
+        // Đăng ký user online
+        socket.on("register", (userId) => {
+            users.set(userId, socket.id);
+            console.log(`🔵 User ${userId} online với socketId: ${socket.id}`);
         });
 
-        // Nhận tin nhắn và gửi lại cho tất cả người dùng
-        socket.on("message", (data) => {
-            console.log("📩 Tin nhắn nhận được:", data);
-            io.emit("message", data); // Phát tin nhắn đến tất cả client
+        // Xử lý gửi tin nhắn
+
+        socket.on("sendMessage", async ({ senderId, receiverId, message }) => {
+            const receiverSocketId = users.get(receiverId);
+            
+            // Lưu tin nhắn vào MongoDB
+            const newMessage = new Message({ senderId, receiverId, message });
+            await newMessage.save();
+        
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit("receiveMessage", { senderId, message });
+                console.log(`📩 Tin nhắn từ ${senderId} đến ${receiverId}: ${message}`);
+            } else {
+                console.log(`⚠️ User ${receiverId} hiện không online.`);
+            }
         });
 
-        // Khi user ngắt kết nối
+        // Ngắt kết nối
         socket.on("disconnect", () => {
-            const userId = Object.keys(connectedUsers).find(
-                (key) => connectedUsers[key] === socket.id
-            );
-            if (userId) {
-                delete connectedUsers[userId];
-                console.log(`❌ User ${userId} đã ngắt kết nối`);
+            for (let [userId, socketId] of users.entries()) {
+                if (socketId === socket.id) {
+                    users.delete(userId);
+                    console.log(`🔴 User ${userId} offline`);
+                    break;
+                }
             }
         });
     });
-};
+}
 
-// Hàm gửi thông báo đến một user dựa vào userId
-const sendNotification = (userId, event, data) => {
-    console.log("📡 Danh sách người dùng kết nối:", connectedUsers);
-
-    const socketId = connectedUsers[userId];
-    if (socketId && io) {
-        io.to(socketId).emit(event, data);
-        console.log(`📩 Gửi thông báo cho user ${userId}: ${event}`);
-    } else {
-        console.error(`❌ Không tìm thấy socket cho user ${userId}`);
-    }
-};
-
-
-module.exports = { initSocket, sendNotification, connectedUsers };
+module.exports = { initSocket };

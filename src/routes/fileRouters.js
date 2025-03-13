@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { uploadFile, getImages } = require("../controllers/fileController");
+const { uploadFile, getImages } = require("../controllers/FileController");
 
 // Đảm bảo thư mục `uploads/` tồn tại
 const fs = require("fs");

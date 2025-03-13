@@ -1,4 +1,4 @@
-const FriendRequest = require("../models/FriendRequest");
+const FriendRequest = require("../models/frendRequest");
 const User = require("../models/User");
 const { sendNotification } = require("../services/socketService");
 
@@ -7,7 +7,7 @@ exports.sendFriendRequest = async (req, res) => {
     try {
         const { senderId, receiverId } = req.body;
 
-        // Kiểm tra nếu hai người đã là bạn bè hoặc đã gửi lời mời trước đó
+        // Kiểm tra nếu đã gửi lời mời hoặc đã là bạn bè
         const existingRequest = await FriendRequest.findOne({
             $or: [
                 { senderId, receiverId },
@@ -23,8 +23,14 @@ exports.sendFriendRequest = async (req, res) => {
         const newRequest = new FriendRequest({ senderId, receiverId });
         await newRequest.save();
 
-        // Gửi thông báo đến người nhận lời mời kết bạn
-        sendNotification(receiverId, "friend_request_received", { senderId });
+        // 🔹 Gửi thông báo WebSocket đến người nhận
+        sendNotification(receiverId, {
+            event: "receive_friend_request",
+            data: {
+                senderId,
+                message: "Bạn có một lời mời kết bạn mới!"
+            }
+        });
 
         res.status(201).json({ message: "Đã gửi lời mời kết bạn", request: newRequest });
     } catch (error) {
@@ -61,12 +67,35 @@ exports.respondToFriendRequest = async (req, res) => {
         }
         
         // Xử lý chấp nhận hoặc từ chối
+        let responseMessage;
         if (action === "accept") {
             console.log("✅ Chấp nhận lời mời");
             friendRequest.status = "accepted";
+            responseMessage = "Lời mời kết bạn đã được chấp nhận!";
+            
+            // 🔹 Gửi thông báo WebSocket đến người gửi (senderId)
+            sendNotification(friendRequest.senderId, {
+                event: "friend_request_accepted",
+                data: {
+                    receiverId: userId,
+                    message: "Lời mời kết bạn của bạn đã được chấp nhận!"
+                }
+            });
+
         } else if (action === "decline") {
             console.log("❌ Từ chối lời mời");
             friendRequest.status = "declined";
+            responseMessage = "Lời mời kết bạn đã bị từ chối.";
+            
+            // 🔹 Gửi thông báo WebSocket đến người gửi (senderId) (có thể bỏ qua nếu không cần)
+            sendNotification(friendRequest.senderId, {
+                event: "friend_request_declined",
+                data: {
+                    receiverId: userId,
+                    message: "Lời mời kết bạn của bạn đã bị từ chối."
+                }
+            });
+
         } else {
             console.log("❌ Hành động không hợp lệ:", action);
             return res.status(400).json({ message: "Hành động không hợp lệ. Action phải là [accept, decline]" });
@@ -74,11 +103,7 @@ exports.respondToFriendRequest = async (req, res) => {
 
         await friendRequest.save();
 
-        // Gửi thông báo đến người gửi lời mời
-        sendNotification(friendRequest.senderId, "friend_request", { action, userId });
-        console.log(`📩 Đã gửi thông báo đến user ${friendRequest.senderId} về kết quả lời mời`);
-
-        res.status(200).json({ message: `Đã ${action} lời mời kết bạn` });
+        res.status(200).json({ message: responseMessage });
     } catch (error) {
         console.error("❌ Lỗi xử lý lời mời kết bạn:", error);
         res.status(500).json({ error: "Lỗi server" });

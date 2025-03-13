@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test WebSocket</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = new WebSocket("ws://localhost:3000");
+    
+        socket.onopen = () => {
+            console.log("✅ WebSocket kết nối!");
+            socket.send(JSON.stringify({ event: "register", data: "user_456" }));
+        };
+    
+        socket.onmessage = (event) => {
+            console.log("📩 Nhận từ server:", event.data);
+        };
+    </script>
+    
+</head>
+<body>
+    <h1>WebSocket API - Kết bạn</h1>
+    <script>
+        const socket = io("http://localhost:3000");
+
+        // User A online
+        socket.emit("user_online", "userA");
+
+        // Gửi lời mời kết bạn từ userA đến userB
+        function sendFriendRequest() {
+            socket.emit("send_friend_request", { senderId: "userA", receiverId: "userB" });
+        }
+
+        // User B online
+        setTimeout(() => {
+            socket.emit("user_online", "userB");
+        }, 3000);
+
+        // Nhận thông báo kết bạn
+        socket.on("receive_friend_request", (data) => {
+            alert(`📩 Bạn nhận được lời mời kết bạn từ ${data.senderId}`);
+            console.log("Lời mời kết bạn từ:", data.senderId);
+        });
+
+        // Khi User B chấp nhận lời mời
+        function acceptFriendRequest() {
+            socket.emit("accept_friend_request", { senderId: "userA", receiverId: "userB" });
+        }
+
+        // Nhận thông báo lời mời đã được chấp nhận
+        socket.on("friend_request_accepted", (data) => {
+            alert(`✅ ${data.receiverId} đã chấp nhận lời mời kết bạn của bạn!`);
+            console.log("Lời mời được chấp nhận bởi:", data.receiverId);
+        });
+
+    </script>
+    <button onclick="sendFriendRequest()">Gửi kết bạn</button>
+    <button onclick="acceptFriendRequest()">Chấp nhận kết bạn</button>
+</body>
+</html>
