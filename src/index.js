@@ -6,12 +6,12 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const http = require("http");
 const connectDB = require("./config/db"); 
-const { initSocket } = require("./services/socketService"); // Import socket service
+const { initSocket } = require("./services/socket/socketService"); // Import socket service
 const authRoutes = require("./routes/authRoutes");
 const fileRouter = require("./routes/fileRouters");
 const userRouter = require("./routes/userRouter");
-const friendRouter = require("./routes/frendRouter");
-const messages = require('./routes/chatRouter')
+const friendRouter = require("./routes/friendRouter");
+const messages = require('./routes/messageRouter')
 
 const app = express();
 

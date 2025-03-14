@@ -1,16 +1,21 @@
-const Message = require('../models/messages');
+const Message = require("../models/messages");
+const { users } = require("../services/socket/userSocketHandler"); // Lấy danh sách user online
 
-//get message history
-exports.messages = async (req, res) => {
-    try {
-      const messages = await Message.find({
-        $or: [
-          { sender: req.user.userId, receiver: req.params.receiverId },
-          { sender: req.params.receiverId, receiver: req.user.userId },
-        ],
-      }).sort({ timestamp: 1 });
-  
-      res.json(messages);
-    } catch (error) {
-      res.status(500).json({ error: "Error retrieving messages" });
-    }}
+async function sendMessage(socket, io) {
+    socket.on("sendMessage", async ({ senderId, receiverId, message }) => {
+        const receiverSocketId = users.get(receiverId);
+
+        // Lưu tin nhắn vào MongoDB
+        const newMessage = new Message({ senderId, receiverId, message });
+        await newMessage.save();
+
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("receiveMessage", { senderId, receiverId, message });
+            console.log(`📩 Tin nhắn từ ${senderId} đến ${receiverId}: ${message}`);
+        } else {
+            console.log(`⚠️ User ${receiverId} hiện không online.`);
+        }
+    });
+}
+
+module.exports = { sendMessage };
