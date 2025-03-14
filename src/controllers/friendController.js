@@ -1,90 +1,203 @@
-const FriendRequest = require("../models/frendRequest"); 
-const { users } = require("../services/socket/userSocketHandler"); // Lấy danh sách user online
+const FriendRequest = require("../models/frendRequest");
+const { getUserSocketId, isUserOnline } = require("../services/socket/userSocketHandler");
+const mongoose = require("mongoose");
 
-async function sendFriendRequest(socket, io) {
+// Gửi lời mời kết bạn qua Socket
+function handleSendFriendRequest(socket, io) {
     socket.on("sendFriendRequest", async ({ senderId, receiverId }) => {
         try {
-            const receiverSocketId = users.get(receiverId);
-
-            // Kiểm tra xem đã có lời mời kết bạn chưa
-            const existingRequest = await FriendRequest.findOne({ senderId, receiverId, status: "pending" });
-            if (existingRequest) {
-                console.log(`⚠️ Lời mời kết bạn từ ${senderId} đến ${receiverId} đã tồn tại.`);
-                return;
+            if (!senderId || !receiverId) {
+                throw new Error("Thiếu senderId hoặc receiverId");
             }
 
-            // Lưu yêu cầu kết bạn vào MongoDB
+            const senderSocketId = getUserSocketId(senderId);
+
+            // Kiểm tra lời mời trùng lặp
+            const existingRequest = await FriendRequest.findOne({
+                senderId,
+                receiverId,
+                status: "pending",
+            });
+            if (existingRequest) {
+                return io.to(senderSocketId).emit("friendRequestStatus", {
+                    status: "error",
+                    message: "Bạn đã gửi lời mời trước đó!",
+                });
+            }
+
+            // Tạo và lưu lời mời kết bạn
             const newFriendRequest = new FriendRequest({ senderId, receiverId });
             await newFriendRequest.save();
 
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("receiveFriendRequest", { senderId, receiverId });
+            // Thông báo tới người nhận nếu online
+            const receiverSocketId = getUserSocketId(receiverId);
+            if (isUserOnline(receiverId)) {
+                io.to(receiverSocketId).emit("receiveFriendRequest", {
+                    senderId,
+                    receiverId,
+                    requestId: newFriendRequest._id,
+                });
                 console.log(`📩 Yêu cầu kết bạn từ ${senderId} đến ${receiverId}`);
             } else {
-                console.log(`⚠️ Người dùng ${receiverId} không online, yêu cầu sẽ được lưu.`);
+                console.log(`⚠️ Người dùng ${receiverId} không online`);
             }
+
+            // Phản hồi người gửi
+            io.to(senderSocketId).emit("friendRequestStatus", {
+                status: "success",
+                message: "Gửi lời mời kết bạn thành công!",
+            });
         } catch (error) {
-            console.error("❌ Lỗi khi gửi yêu cầu kết bạn:", error);
+            console.error("❌ Lỗi gửi lời mời kết bạn:", error.message);
+            io.to(getUserSocketId(senderId)).emit("friendRequestStatus", {
+                status: "error",
+                message: "Lỗi khi gửi lời mời kết bạn!",
+            });
         }
     });
 }
 
-async function acceptFriendRequest(socket, io) {
+// Chấp nhận lời mời kết bạn qua Socket
+function handleAcceptFriendRequest(socket, io) {
     socket.on("acceptFriendRequest", async ({ requestId, receiverId }) => {
         try {
+            if (!mongoose.Types.ObjectId.isValid(requestId)) {
+                throw new Error("requestId không hợp lệ");
+            }
+
             const friendRequest = await FriendRequest.findById(requestId);
-
             if (!friendRequest) {
-                console.log("❌ Không tìm thấy lời mời kết bạn.");
-                return;
+                throw new Error("Không tìm thấy lời mời kết bạn");
             }
-
             if (friendRequest.status !== "pending") {
-                console.log("⚠️ Lời mời kết bạn đã được xử lý trước đó.");
-                return;
+                throw new Error("Lời mời đã được xử lý trước đó");
             }
 
-            // Cập nhật trạng thái thành "accepted"
+            // Cập nhật trạng thái
             friendRequest.status = "accepted";
             await friendRequest.save();
 
-            const senderSocketId = users.get(friendRequest.senderId);
-            if (senderSocketId) {
-                io.to(senderSocketId).emit("friendRequestAccepted", { 
-                    senderId: friendRequest.senderId, 
-                    receiverId: friendRequest.receiverId 
+            // Thông báo tới người gửi nếu online
+            const senderSocketId = getUserSocketId(friendRequest.senderId);
+            if (isUserOnline(friendRequest.senderId)) {
+                io.to(senderSocketId).emit("friendRequestAccepted", {
+                    senderId: friendRequest.senderId,
+                    receiverId,
                 });
-                console.log(`✅ ${receiverId} đã chấp nhận lời mời kết bạn từ ${friendRequest.senderId}`);
+                console.log(`✅ ${receiverId} đã chấp nhận lời mời từ ${friendRequest.senderId}`);
             }
-
         } catch (error) {
-            console.error("❌ Lỗi khi chấp nhận lời mời kết bạn:", error);
+            console.error("❌ Lỗi chấp nhận lời mời:", error.message);
+            io.to(getUserSocketId(receiverId)).emit("friendRequestStatus", {
+                status: "error",
+                message: error.message,
+            });
         }
     });
 }
 
-async function getFriendRequests(req, res) {
+// API: Gửi lời mời kết bạn (HTTP) - Giữ nguyên như trước
+async function sendFriendRequest(req, res) {
+    const { senderId, receiverId } = req.body;
+
     try {
-        const { userId } = req.params;
-
-        // Kiểm tra userId có hợp lệ không
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
-            return res.status(400).json({ message: "❌ userId không hợp lệ" });
+        if (!senderId || !receiverId) {
+            return res.status(400).json({ message: "Thiếu senderId hoặc receiverId" });
         }
 
-        // Lấy danh sách lời mời kết bạn của userId
-        const requests = await FriendRequest.find({ receiverId: userId, status: "pending" })
-            .populate("senderId", "username email avatar"); // Lấy thêm thông tin người gửi
-
-        if (requests.length === 0) {
-            return res.status(200).json({ message: "📭 Không có lời mời kết bạn nào", requests: [] });
+        const existingRequest = await FriendRequest.findOne({
+            senderId,
+            receiverId,
+            status: "pending",
+        });
+        if (existingRequest) {
+            return res.status(400).json({ message: "Bạn đã gửi lời mời trước đó!" });
         }
 
-        res.status(200).json({ message: "✅ Lấy danh sách lời mời thành công", requests });
+        const newFriendRequest = new FriendRequest({ senderId, receiverId });
+        await newFriendRequest.save();
+
+        res.status(201).json({
+            message: "Gửi lời mời kết bạn thành công!",
+            requestId: newFriendRequest._id,
+        });
     } catch (error) {
-        console.error("❌ Lỗi khi lấy danh sách lời mời:", error);
+        console.error("❌ Lỗi API gửi lời mời:", error);
         res.status(500).json({ message: "Lỗi server", error: error.message });
     }
 }
 
-module.exports = { sendFriendRequest, acceptFriendRequest ,getFriendRequests};
+// API: Chấp nhận lời mời kết bạn (HTTP) - Giữ nguyên như trước
+async function acceptFriendRequest(req, res) {
+    const { requestId } = req.body;
+
+    try {
+        if (!mongoose.Types.ObjectId.isValid(requestId)) {
+            return res.status(400).json({ message: "requestId không hợp lệ" });
+        }
+
+        const friendRequest = await FriendRequest.findById(requestId);
+        if (!friendRequest) {
+            return res.status(404).json({ message: "Không tìm thấy lời mời kết bạn" });
+        }
+        if (friendRequest.status !== "pending") {
+            return res.status(400).json({ message: "Lời mời đã được xử lý trước đó" });
+        }
+
+        friendRequest.status = "accepted";
+        await friendRequest.save();
+
+        res.status(200).json({ message: "Chấp nhận lời mời kết bạn thành công!" });
+    } catch (error) {
+        console.error("❌ Lỗi API chấp nhận lời mời:", error);
+        res.status(500).json({ message: "Lỗi server", error: error.message });
+    }
+}
+
+// API: Lấy danh sách lời mời kết bạn - Giữ nguyên như trước
+async function getFriendRequests(req, res) {
+    const { userId } = req.params;
+
+    try {
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: "userId không hợp lệ" });
+        }
+
+        const requests = await FriendRequest.find({
+            receiverId: userId,
+            status: "pending",
+        }).populate("senderId", "id name email avatar");
+
+        // Thay đổi key senderId -> senderBy
+        const body = requests.map(request => ({
+            id: request._id,
+            senderBy: request.senderId ? {
+                id: request.senderId._id,
+                name: request.senderId.name, 
+                email: request.senderId.email,
+                avatar: request.senderId.avatar
+            } : null,
+            receiverId: request.receiverId,
+            status: request.status,
+            createdAt: request.createdAt,
+            updatedAt: request.updatedAt,
+          
+        }));
+
+        res.status(200).json({
+            message: body.length ? "Lấy danh sách lời mời thành công" : "Không có lời mời nào",
+            body,
+        });
+    } catch (error) {
+        console.error("❌ Lỗi lấy danh sách lời mời:", error);
+        res.status(500).json({ message: "Lỗi server", error: error.message });
+    }
+}
+
+module.exports = {
+    handleSendFriendRequest,
+    handleAcceptFriendRequest,
+    sendFriendRequest,
+    acceptFriendRequest,
+    getFriendRequests,
+};
