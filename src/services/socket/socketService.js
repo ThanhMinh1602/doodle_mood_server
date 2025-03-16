@@ -1,14 +1,8 @@
+// socket.js
 const socketIo = require("socket.io");
-const { 
-    registerUser, 
-    handleDisconnect 
-} = require("./userSocketHandler");
-const {
-    handleSendFriendRequest,
-    handleAcceptFriendRequest,
-} = require("../../controllers/friendController");
+const { registerUser, handleDisconnect } = require("./userSocketHandler");
 
-let io;
+let io; 
 
 function initSocket(server) {
     io = socketIo(server, {
@@ -24,12 +18,6 @@ function initSocket(server) {
         // Đăng ký user online
         registerUser(socket);
 
-        // Xử lý gửi lời mời kết bạn
-        handleSendFriendRequest(socket, io);
-
-        // Xử lý chấp nhận lời mời kết bạn
-        handleAcceptFriendRequest(socket, io);
-
         // Xử lý ngắt kết nối
         handleDisconnect(socket);
     });
@@ -37,4 +25,9 @@ function initSocket(server) {
     return io;
 }
 
-module.exports = { initSocket };
+// Hàm để lấy io ở file khác
+function getSocketIo() {
+    return io;
+}
+
+module.exports = { initSocket, getSocketIo };

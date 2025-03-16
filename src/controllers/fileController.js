@@ -94,17 +94,72 @@ exports.uploadFile = async (req, res) => {
         return res.status(500).json({ success: false, message: "Upload thất bại" });
     }
 };
-//Layas data từ mongo
+// //Layas data từ 
+// exports.getImages = async (req, res) => {
+//     try {
+//         const images = await Image.find().populate("uploadedBy", "name email avatar");
+
+//         const formattedImages = images.map(image => ({
+//             id: image._id,
+//             fileId: image.fileId,
+//             fileName: image.fileName,
+//             mimeType: image.mimeType,
+//             viewLink: image.viewLink,
+//             downloadLink: image.downloadLink,
+//             uploadedBy: {
+//                 id: image.uploadedBy._id,
+//                 name: image.uploadedBy.name,
+//                 email: image.uploadedBy.email,
+//                 avatar: image.uploadedBy.avatar, // Đổi từ 'avt' sang 'avatar' để khớp với model
+//             },
+//             uploadedAt: image.uploadedAt.toISOString(),
+//         }));
+
+//         res.json({ success: true, images: formattedImages });
+//     } catch (error) {
+//         console.error("Lỗi khi lấy danh sách hình ảnh:", error);
+//         res.status(500).json({ success: false, message: "Lỗi server!" });
+//     }
+// };
 exports.getImages = async (req, res) => {
     try {
-        const images = await Image.find().populate("uploadedBy", "name email");
+        const userId = req.user.id; // ID của người đang yêu cầu
 
-        res.json({ success: true, images });
+        // Lấy danh sách bạn bè
+        const user = await User.findById(userId).select("friends");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Người dùng không tồn tại!" });
+        }
+
+        const friendIds = user.friends.map(friend => friend.toString());
+        friendIds.push(userId); // Thêm chính người dùng vào danh sách
+
+        // Lọc ảnh: Chỉ hiển thị ảnh của bạn bè hoặc của chính user
+        const images = await Image.find({ uploadedBy: { $in: friendIds } }).populate("uploadedBy", "name email avatar");
+
+        const formattedImages = images.map(image => ({
+            id: image._id,
+            fileId: image.fileId,
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            viewLink: image.viewLink,
+            downloadLink: image.downloadLink,
+            uploadedBy: {
+                id: image.uploadedBy._id,
+                name: image.uploadedBy.name,
+                email: image.uploadedBy.email,
+                avatar: image.uploadedBy.avatar,
+            },
+            uploadedAt: image.uploadedAt.toISOString(),
+        }));
+
+        res.json({ success: true, images: formattedImages });
     } catch (error) {
         console.error("Lỗi khi lấy danh sách hình ảnh:", error);
         res.status(500).json({ success: false, message: "Lỗi server!" });
     }
 };
+
 
 //lấy từ drivedrive
 exports.getImagesByDrive = async (req, res) => {

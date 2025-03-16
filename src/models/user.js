@@ -4,13 +4,14 @@ const UserSchema = new mongoose.Schema(
     {
         name: { type: String, required: true },
         email: { type: String, required: true, unique: true },
-        avatar: { type: String, default: null }, // Ảnh đại
-        password: { type: String, required: true }, // Ẩn password mặc định
-        resetOTP: { type: String, default: null }, // OTP là số
-        resetOTPExpires: { type: Date, default: null, index: { expires: "15m" } }, // OTP hết hạn sau 15 phút'    
-        friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }] // Danh sách bạn bè
+        avatar: { type: String, default: null },
+        password: { type: String, required: true },
+        resetOTP: { type: String, default: null },
+        resetOTPExpires: { type: Date, default: null, index: { expires: "15m" } },
+        friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
     },
-    { timestamps: true } // Tự động thêm createdAt, updatedAt
+    { timestamps: true }
 );
 
-module.exports = mongoose.model("User", UserSchema);
+// Kiểm tra model đã tồn tại trước khi tạo mới
+module.exports = mongoose.models.User || mongoose.model("User", UserSchema);
