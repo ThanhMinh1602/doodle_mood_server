@@ -1,7 +1,8 @@
 const fs = require("fs");
 const drive = require("../config/googleAuth");
-
 const Image = require("../models/image");
+const User = require("../models/user");
+const { formatUploadedBy } = require("../utils/ utils");
 
 //  Upload file lên Google Drive
 async function uploadFileToDrive(filePath, fileName) {
@@ -23,18 +24,15 @@ async function uploadFileToDrive(filePath, fileName) {
         });
 
         const fileId = response.data.id;
-        console.log(" Upload thành công:", fileId);
+        console.log("✅ Upload thành công:", fileId);
 
-        //  Cấp quyền đọc cho mọi người
+        // Cấp quyền đọc cho mọi người
         await drive.permissions.create({
             fileId: fileId,
-            requestBody: {
-                role: "reader",
-                type: "anyone",
-            },
+            requestBody: { role: "reader", type: "anyone" },
         });
 
-        //  Lấy link file
+        // Lấy link file
         const result = await drive.files.get({
             fileId: fileId,
             fields: "id, webViewLink, webContentLink",
@@ -50,13 +48,13 @@ async function uploadFileToDrive(filePath, fileName) {
             downloadLink: result.data.webContentLink,
         };
     } catch (error) {
-        console.error("Upload error:", error);
+        console.error("❌ Upload error:", error);
         return { success: false, error: error.message };
     }
 }
 
-//  upload file + Lưu thông tin người tải lên
-exports.uploadFile = async (req, res) => {
+// Upload file + Lưu thông tin người tải lên
+async function uploadFile(req, res) {
     if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
     }
@@ -66,7 +64,6 @@ exports.uploadFile = async (req, res) => {
     }
 
     const { userId } = req.body;
-
     console.log("📂 File path:", req.file.path);
     console.log("📄 File name:", req.file.originalname);
     console.log("👤 Uploaded by:", userId);
@@ -87,44 +84,19 @@ exports.uploadFile = async (req, res) => {
             await newImage.save();
             return res.json({ success: true, message: "Upload thành công!", image: newImage });
         } catch (error) {
-            console.error("Lỗi khi lưu vào MongoDB:", error);
+            console.error("❌ Lỗi khi lưu vào MongoDB:", error);
             return res.status(500).json({ success: false, message: "Lỗi khi lưu vào DB" });
         }
     } else {
         return res.status(500).json({ success: false, message: "Upload thất bại" });
     }
-};
-// //Layas data từ 
-// exports.getImages = async (req, res) => {
-//     try {
-//         const images = await Image.find().populate("uploadedBy", "name email avatar");
+}
 
-//         const formattedImages = images.map(image => ({
-//             id: image._id,
-//             fileId: image.fileId,
-//             fileName: image.fileName,
-//             mimeType: image.mimeType,
-//             viewLink: image.viewLink,
-//             downloadLink: image.downloadLink,
-//             uploadedBy: {
-//                 id: image.uploadedBy._id,
-//                 name: image.uploadedBy.name,
-//                 email: image.uploadedBy.email,
-//                 avatar: image.uploadedBy.avatar, // Đổi từ 'avt' sang 'avatar' để khớp với model
-//             },
-//             uploadedAt: image.uploadedAt.toISOString(),
-//         }));
+// Lấy danh sách hình ảnh của bạn bè và chính user
 
-//         res.json({ success: true, images: formattedImages });
-//     } catch (error) {
-//         console.error("Lỗi khi lấy danh sách hình ảnh:", error);
-//         res.status(500).json({ success: false, message: "Lỗi server!" });
-//     }
-// };
-exports.getImages = async (req, res) => {
+async function getImages(req, res) {
     try {
-        const userId = req.user.id; // ID của người đang yêu cầu
-
+        const userId = req.params.userId; // Lấy giá trị userId chính xác
         // Lấy danh sách bạn bè
         const user = await User.findById(userId).select("friends");
         if (!user) {
@@ -132,10 +104,11 @@ exports.getImages = async (req, res) => {
         }
 
         const friendIds = user.friends.map(friend => friend.toString());
-        friendIds.push(userId); // Thêm chính người dùng vào danh sách
+        friendIds.push(userId);
 
         // Lọc ảnh: Chỉ hiển thị ảnh của bạn bè hoặc của chính user
-        const images = await Image.find({ uploadedBy: { $in: friendIds } }).populate("uploadedBy", "name email avatar");
+        const images = await Image.find({ uploadedBy: { $in: friendIds } })
+            .populate("uploadedBy", "name email avatar");
 
         const formattedImages = images.map(image => ({
             id: image._id,
@@ -144,25 +117,21 @@ exports.getImages = async (req, res) => {
             mimeType: image.mimeType,
             viewLink: image.viewLink,
             downloadLink: image.downloadLink,
-            uploadedBy: {
-                id: image.uploadedBy._id,
-                name: image.uploadedBy.name,
-                email: image.uploadedBy.email,
-                avatar: image.uploadedBy.avatar,
-            },
+            uploadedBy: formatUploadedBy(image.uploadedBy),
             uploadedAt: image.uploadedAt.toISOString(),
         }));
 
-        res.json({ success: true, images: formattedImages });
+        res.json({ success: true, 
+            total: formattedImages.length,
+            images: formattedImages });
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách hình ảnh:", error);
+        console.error("❌ Lỗi khi lấy danh sách hình ảnh:", error);
         res.status(500).json({ success: false, message: "Lỗi server!" });
     }
-};
+}
 
-
-//lấy từ drivedrive
-exports.getImagesByDrive = async (req, res) => {
+// Lấy danh sách hình ảnh từ Google Drive
+async function getImagesByDrive(req, res) {
     try {
         const response = await drive.files.list({
             q: "mimeType contains 'image/'",
@@ -179,8 +148,14 @@ exports.getImagesByDrive = async (req, res) => {
 
         res.json({ success: true, images });
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách hình ảnh:", error);
+        console.error("❌ Lỗi khi lấy danh sách hình ảnh từ Drive:", error);
         res.status(500).json({ success: false, message: "Lỗi server!" });
     }
+}
 
+// Export module
+module.exports = {
+    uploadFile,
+    getImages,
+    getImagesByDrive,
 };

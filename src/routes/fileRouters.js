@@ -19,6 +19,6 @@ const router = express.Router();
 router.post("/file-upload", upload.single("file"), uploadFile);
 
 // ✅ Route lấy danh sách hình ảnh
-router.get("/list-images", getImages);
+router.get("/list-images/:userId", getImages);
 
 module.exports = router;
