@@ -117,7 +117,7 @@ async function getImages(req, res) {
     // Lọc ảnh theo userId và bạn bè, sắp xếp theo `uploadedAt` giảm dần (mới nhất trước)
     const images = await Image.find({ uploadedBy: { $in: friendIds } })
       .populate('uploadedBy', 'name email avatar')
-      .sort({ uploadedAt: -1 }); // Sắp xếp giảm dần theo thời gian
+      .sort({ uploadedAt: -1 }); // sắp xếp giảm dần theo thời gia
 
     // Định dạng dữ liệu trả về
     const formattedImages = images.map((image) => ({

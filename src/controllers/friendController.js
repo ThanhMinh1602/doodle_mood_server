@@ -40,7 +40,7 @@ async function sendFriendRequest(req, res) {
     ) {
       return res
         .status(400)
-        .json({ message: 'Không thể gửi lời mời cho chính mình' });
+        .json({ message: 'Không thể gửi lời mời cho chính mình!' });
     }
 
     // Kiểm tra xem receiverId đã có trong danh sách bạn của senderId chưa
@@ -99,13 +99,13 @@ async function acceptFriendRequest(req, res) {
     if (!friendRequest) {
       return res
         .status(404)
-        .json({ message: 'Không tìm thấy lời mời kết bạn' });
+        .json({ message: 'Không tìm thấy lời mời kết bạn!' });
     }
 
     if (friendRequest.status !== 'pending') {
       return res
         .status(400)
-        .json({ message: 'Lời mời đã được xử lý trước đó' });
+        .json({ message: 'Lời mời đã được xử lý trước đó!' });
     }
 
     const senderId = friendRequest.senderId;
