@@ -1,33 +1,31 @@
-// socket.js
-const socketIo = require("socket.io");
-const { registerUser, handleDisconnect } = require("./userSocketHandler");
+const socketIo = require('socket.io');
+const { registerUser, handleDisconnect } = require('./userSocketHandler');
 
-let io; 
+let io;
 
 function initSocket(server) {
-    io = socketIo(server, {
-        cors: {
-            origin: "*",
-            methods: ["GET", "POST"],
-        },
-    });
+  io = socketIo(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST'],
+    },
+  });
 
-    io.on("connection", (socket) => {
-        console.log("🟢 Người dùng kết nối:", socket.id);
+  io.on('connection', (socket) => {
+    console.log('🟢 Người dùng kết nối:', socket.id);
 
-        // Đăng ký user online
-        registerUser(socket);
+    // Đăng ký user online
+    registerUser(socket);
 
-        // Xử lý ngắt kết nối
-        handleDisconnect(socket);
-    });
+    // Xử lý ngắt kết nối
+    handleDisconnect(socket);
+  });
 
-    return io;
+  return io;
 }
 
-// Hàm để lấy io ở file khác
 function getSocketIo() {
-    return io;
+  return io;
 }
 
 module.exports = { initSocket, getSocketIo };
