@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const User = require('../models/user');
 exports.searchUsers = async (req, res) => {
   try {
     const { query } = req.query; //lấy keywork từ query string
