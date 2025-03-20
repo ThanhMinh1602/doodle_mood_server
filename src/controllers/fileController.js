@@ -2,7 +2,7 @@ const fs = require('fs');
 const drive = require('../config/googleAuth');
 const Image = require('../models/image');
 const User = require('../models/user');
-const { formatUploadedBy } = require('../utils/ utils');
+const { formatUploadedBy } = require('../utils/utils');
 
 //  Upload file lên Google Drive
 async function uploadFileToDrive(filePath, fileName) {
