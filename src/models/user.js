@@ -9,6 +9,7 @@ const UserSchema = new mongoose.Schema(
     resetOTP: { type: String, default: null },
     resetOTPExpires: { type: Date, default: null, index: { expires: '15m' } },
     friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    deviceToken: { type: String, default: null },
   },
   { timestamps: true }
 );

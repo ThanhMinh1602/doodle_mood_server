@@ -38,7 +38,8 @@ exports.register = async (req, res) => {
 // Đăng nhập
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, deviceToken } = req.body;
+    console.log(req.body);
 
     if (!validateInput([email, password])) {
       return res
@@ -56,13 +57,24 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     }
 
+    // Cập nhật deviceToken nếu có
+    if (deviceToken) {
+      user.deviceToken = deviceToken;
+      await user.save();
+    }
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
 
     res.status(200).json({
       token,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        deviceToken: user.deviceToken,
+      },
     });
   } catch (error) {
     console.error('Lỗi đăng nhập:', error);

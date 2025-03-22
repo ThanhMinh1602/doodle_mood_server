@@ -12,7 +12,7 @@ exports.searchUsers = async (req, res) => {
         { name: { $regex: query, $options: 'i' } }, // Tìm theo tên
         { email: { $regex: query, $options: 'i' } }, // Tìm theo email
       ],
-    }).select('name email avt'); // chỉ lấy các trường này của user
+    }).select('name email avt');
 
     res.status(200).json({ users });
   } catch (error) {

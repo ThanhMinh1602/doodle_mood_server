@@ -1,11 +1,10 @@
-const FriendRequest = require('../models/frendRequest'); // Sửa typo nếu cần thành "friendRequest"
+const mongoose = require('mongoose');
+const FriendRequest = require('../models/frendRequest');
 const User = require('../models/user');
 const {
-  getUserSocketId,
-  isUserOnline,
-} = require('../services/socket/userSocketHandler');
-const mongoose = require('mongoose');
-const { getSocketIo } = require('../services/socket/socketService');
+  sendNotification,
+  MessagingType,
+} = require('../services/firebase/notification_service');
 
 const Status = Object.freeze({
   PENDING: 'pending',
@@ -16,7 +15,6 @@ const Status = Object.freeze({
 // Gửi lời mời kết bạn
 async function sendFriendRequest(req, res) {
   const { senderId, receiverId } = req.body;
-  const io = getSocketIo(); // Lấy instance io
 
   try {
     if (!senderId || !receiverId) {
@@ -30,8 +28,10 @@ async function sendFriendRequest(req, res) {
         .json({ message: 'Không thể gửi lời mời cho chính mình' });
     }
 
-    const sender = await User.findById(senderId);
-    const receiver = await User.findById(receiverId);
+    const [sender, receiver] = await Promise.all([
+      User.findById(senderId),
+      User.findById(receiverId),
+    ]);
 
     if (!sender || !receiver) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
@@ -54,31 +54,23 @@ async function sendFriendRequest(req, res) {
       return res.status(400).json({ message: 'Bạn đã gửi lời mời trước đó!' });
     }
 
-    // Tạo lời mời mới
     const newFriendRequest = new FriendRequest({ senderId, receiverId });
-    await newFriendRequest.save();
 
-    // Dữ liệu gửi qua socket
-    const requestData = {
-      id: newFriendRequest._id,
-      senderBy: {
-        id: sender._id,
-        name: sender.name,
-        email: sender.email,
-        avatar: sender.avatar,
-      },
-      receiverId: receiver._id,
-      status: newFriendRequest.status,
-      createdAt: newFriendRequest.createdAt,
-      updatedAt: newFriendRequest.updatedAt,
-    };
+    // Dùng Promise.all để đảm bảo cả lưu vào DB và gửi thông báo phải thành công
+    await Promise.all([
+      newFriendRequest.save(),
+      sendNotification(
+        receiver.deviceToken,
+        'Lời mời kết bạn',
+        `${sender.name} đã gửi cho bạn một lời mời kết bạn!`
+      ),
+    ]).catch(async (error) => {
+      console.error('❌ Lỗi trong quá trình gửi lời mời:', error);
 
-    // Gửi thông báo qua socket nếu người nhận online
-    const receiverSocketId = getUserSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('receiveFriendRequest', requestData);
-      console.log(`📩 Yêu cầu kết bạn từ ${senderId} đến ${receiverId}`);
-    }
+      // Nếu có lỗi, xóa lời mời đã lưu (nếu có)
+      await FriendRequest.findByIdAndDelete(newFriendRequest._id);
+      throw new Error('Gửi lời mời kết bạn thất bại!');
+    });
 
     return res.status(201).json({
       message: 'Gửi lời mời kết bạn thành công!',
@@ -95,11 +87,12 @@ async function sendFriendRequest(req, res) {
 // Chấp nhận hoặc từ chối lời mời kết bạn
 async function acceptFriendRequest(req, res) {
   const { requestId, receiverId, status } = req.body;
-  const io = getSocketIo(); // Lấy instance io
 
   try {
-    if (!mongoose.Types.ObjectId.isValid(requestId)) {
-      return res.status(400).json({ message: 'requestId không hợp lệ' });
+    if (!requestId || !receiverId || !status) {
+      return res
+        .status(400)
+        .json({ message: 'Thiếu requestId, receiverId hoặc status' });
     }
 
     const friendRequest = await FriendRequest.findById(requestId);
@@ -115,10 +108,21 @@ async function acceptFriendRequest(req, res) {
         .json({ message: 'Lời mời đã được xử lý trước đó!' });
     }
 
-    const senderId = friendRequest.senderId;
+    const { senderId } = friendRequest;
+
+    const [sender, receiver] = await Promise.all([
+      User.findById(senderId),
+      User.findById(receiverId),
+    ]);
+
+    if (!sender || !receiver) {
+      return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+    }
+
+    let responseMessage = '';
 
     if (status === Status.ACCEPTED) {
-      // Cập nhật danh sách bạn bè
+      // Cập nhật danh sách bạn bè của cả hai người
       await Promise.all([
         User.findByIdAndUpdate(senderId, {
           $addToSet: { friends: receiverId },
@@ -128,24 +132,27 @@ async function acceptFriendRequest(req, res) {
         }),
       ]);
 
-      // Gửi thông báo qua socket tới người gửi nếu họ online
-      const senderSocketId = getUserSocketId(senderId);
-      if (isUserOnline(senderId) && senderSocketId) {
-        io.to(senderSocketId).emit('friendRequestAccepted', {
-          senderId,
-          receiverId,
-        });
-        console.log(`✅ ${receiverId} đã chấp nhận lời mời từ ${senderId}`);
-      }
+      responseMessage = `${receiver.name} đã chấp nhận lời mời kết bạn của bạn!`;
     } else if (status === Status.REJECTED) {
-      console.log(`❌ ${receiverId} đã từ chối lời mời từ ${senderId}`);
+      responseMessage = `${receiver.name} đã từ chối lời mời kết bạn của bạn!`;
     }
 
-    // Xóa lời mời sau khi xử lý
-    await FriendRequest.findByIdAndDelete(requestId);
+    // Dùng Promise.all để đảm bảo nếu thông báo lỗi, thì lời mời không bị xóa
+    await Promise.all([
+      FriendRequest.findByIdAndDelete(requestId),
+      sendNotification(
+        sender.deviceToken,
+        'Phản hồi lời mời kết bạn',
+        responseMessage
+      ),
+    ]).catch(async (error) => {
+      console.error('❌ Lỗi khi chấp nhận/từ chối lời mời:', error);
+      throw new Error('Xử lý lời mời kết bạn thất bại!');
+    });
 
     return res.status(200).json({
-      message: `Lời mời kết bạn đã được ${status} và xóa khỏi hệ thống!`,
+      message: `Lời mời kết bạn đã được ${status} thành công!`,
+      requestId,
     });
   } catch (error) {
     console.error('❌ Lỗi API chấp nhận/từ chối lời mời:', error);
@@ -169,7 +176,13 @@ async function getFriendRequests(req, res) {
       status: Status.PENDING,
     }).populate('senderId', 'id name email avatar');
 
-    const body = requests.map((request) => ({
+    // Lọc bỏ lời mời mà senderId trùng với userId
+    const filteredRequests = requests.filter(
+      (request) =>
+        request.senderId && request.senderId._id.toString() !== userId
+    );
+
+    const body = filteredRequests.map((request) => ({
       id: request._id,
       senderBy: request.senderId
         ? {

@@ -16,7 +16,6 @@ function initSocket(server) {
 
     // Đăng ký user online
     registerUser(socket);
-
     // Xử lý ngắt kết nối
     handleDisconnect(socket);
   });
