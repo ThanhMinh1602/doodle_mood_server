@@ -3,6 +3,12 @@ const drive = require('../config/googleAuth');
 const Image = require('../models/image');
 const User = require('../models/user');
 const { formatUploadedBy } = require('../utils/formatBody');
+const {
+  successResponse,
+  errorResponse,
+  validationError,
+  notFoundError,
+} = require('../utils/responseUtils');
 
 //  Upload file lên Google Drive
 async function uploadFileToDrive(filePath, fileName) {
@@ -56,11 +62,11 @@ async function uploadFileToDrive(filePath, fileName) {
 // Upload file + Lưu thông tin người tải lên
 async function uploadFile(req, res) {
   if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded' });
+    return validationError(res, 'No file uploaded');
   }
 
   if (!req.body.userId) {
-    return res.status(400).json({ message: 'Missing userId' });
+    return validationError(res, 'Missing userId');
   }
 
   const { userId } = req.body;
@@ -82,19 +88,13 @@ async function uploadFile(req, res) {
       });
 
       await newImage.save();
-      return res.json({
-        success: true,
-        message: 'Upload thành công!',
-        image: newImage,
-      });
+      return successResponse(res, { image: newImage }, 'Upload thành công!');
     } catch (error) {
       console.error('❌ Lỗi khi lưu vào MongoDB:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Lỗi khi lưu vào DB' });
+      return errorResponse(res, 'Lỗi khi lưu vào DB', 500, error);
     }
   } else {
-    return res.status(500).json({ success: false, message: 'Upload thất bại' });
+    return errorResponse(res, 'Upload thất bại', 500, result.error);
   }
 }
 
@@ -106,9 +106,7 @@ async function getImages(req, res) {
     // Lấy danh sách bạn bè
     const user = await User.findById(userId).select('friends');
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Người dùng không tồn tại!' });
+      return notFoundError(res, 'Người dùng không tồn tại!');
     }
 
     const friendIds = user.friends.map((friend) => friend.toString());
@@ -117,7 +115,7 @@ async function getImages(req, res) {
     // Lọc ảnh theo userId và bạn bè, sắp xếp theo `uploadedAt` giảm dần (mới nhất trước)
     const images = await Image.find({ uploadedBy: { $in: friendIds } })
       .populate('uploadedBy', 'name email avatar')
-      .sort({ uploadedAt: -1 }); // sắp xếp giảm dần theo thời gia
+      .sort({ uploadedAt: -1 }); // sắp xếp giảm dần theo thời gian
 
     // Định dạng dữ liệu trả về
     const formattedImages = images.map((image) => ({
@@ -131,14 +129,10 @@ async function getImages(req, res) {
       uploadedAt: image.uploadedAt.toISOString(),
     }));
 
-    res.json({
-      success: true,
-      total: formattedImages.length,
-      images: formattedImages,
-    });
+    return successResponse(res, formattedImages);
   } catch (error) {
     console.error('❌ Lỗi khi lấy danh sách hình ảnh:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server!' });
+    return errorResponse(res, 'Lỗi server!', 500, error);
   }
 }
 
@@ -158,10 +152,10 @@ async function getImagesByDrive(req, res) {
       downloadLink: file.webContentLink,
     }));
 
-    res.json({ success: true, images });
+    return successResponse(res, { images });
   } catch (error) {
     console.error('❌ Lỗi khi lấy danh sách hình ảnh từ Drive:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server!' });
+    return errorResponse(res, 'Lỗi server!', 500, error);
   }
 }
 

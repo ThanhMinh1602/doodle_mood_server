@@ -5,6 +5,12 @@ const {
   sendNotification,
   MessagingType,
 } = require('../services/firebase/notification_service');
+const {
+  successResponse,
+  errorResponse,
+  validationError,
+  notFoundError,
+} = require('../utils/responseUtils');
 
 const Status = Object.freeze({
   PENDING: 'pending',
@@ -18,14 +24,10 @@ async function sendFriendRequest(req, res) {
 
   try {
     if (!senderId || !receiverId) {
-      return res
-        .status(400)
-        .json({ message: 'Thiếu senderId hoặc receiverId' });
+      return validationError(res, 'Thiếu senderId hoặc receiverId');
     }
     if (senderId === receiverId) {
-      return res
-        .status(400)
-        .json({ message: 'Không thể gửi lời mời cho chính mình' });
+      return validationError(res, 'Không thể gửi lời mời cho chính mình');
     }
 
     const [sender, receiver] = await Promise.all([
@@ -34,14 +36,14 @@ async function sendFriendRequest(req, res) {
     ]);
 
     if (!sender || !receiver) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại' });
+      return notFoundError(res, 'Người dùng không tồn tại');
     }
 
     if (
       sender.friends.includes(receiverId) ||
       receiver.friends.includes(senderId)
     ) {
-      return res.status(400).json({ message: 'Hai người đã là bạn bè!' });
+      return validationError(res, 'Hai người đã là bạn bè!');
     }
 
     const existingRequest = await FriendRequest.findOne({
@@ -51,7 +53,7 @@ async function sendFriendRequest(req, res) {
     });
 
     if (existingRequest) {
-      return res.status(400).json({ message: 'Bạn đã gửi lời mời trước đó!' });
+      return validationError(res, 'Bạn đã gửi lời mời trước đó!');
     }
 
     const newFriendRequest = new FriendRequest({ senderId, receiverId });
@@ -72,15 +74,15 @@ async function sendFriendRequest(req, res) {
       throw new Error('Gửi lời mời kết bạn thất bại!');
     });
 
-    return res.status(201).json({
-      message: 'Gửi lời mời kết bạn thành công!',
-      requestId: newFriendRequest._id,
-    });
+    return successResponse(
+      res,
+      { requestId: newFriendRequest._id },
+      'Gửi lời mời kết bạn thành công!',
+      201
+    );
   } catch (error) {
     console.error('❌ Lỗi API gửi lời mời:', error);
-    return res
-      .status(500)
-      .json({ message: 'Lỗi server', error: error.message });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 }
 
@@ -90,22 +92,16 @@ async function acceptFriendRequest(req, res) {
 
   try {
     if (!requestId || !receiverId || !status) {
-      return res
-        .status(400)
-        .json({ message: 'Thiếu requestId, receiverId hoặc status' });
+      return validationError(res, 'Thiếu requestId, receiverId hoặc status');
     }
 
     const friendRequest = await FriendRequest.findById(requestId);
     if (!friendRequest) {
-      return res
-        .status(404)
-        .json({ message: 'Không tìm thấy lời mời kết bạn!' });
+      return notFoundError(res, 'Không tìm thấy lời mời kết bạn!');
     }
 
     if (friendRequest.status !== Status.PENDING) {
-      return res
-        .status(400)
-        .json({ message: 'Lời mời đã được xử lý trước đó!' });
+      return validationError(res, 'Lời mời đã được xử lý trước đó!');
     }
 
     const { senderId } = friendRequest;
@@ -116,7 +112,7 @@ async function acceptFriendRequest(req, res) {
     ]);
 
     if (!sender || !receiver) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+      return notFoundError(res, 'Người dùng không tồn tại!');
     }
 
     let responseMessage = '';
@@ -150,15 +146,14 @@ async function acceptFriendRequest(req, res) {
       throw new Error('Xử lý lời mời kết bạn thất bại!');
     });
 
-    return res.status(200).json({
-      message: `Lời mời kết bạn đã được ${status} thành công!`,
-      requestId,
-    });
+    return successResponse(
+      res,
+      { requestId },
+      `Lời mời kết bạn đã được ${status} thành công!`
+    );
   } catch (error) {
     console.error('❌ Lỗi API chấp nhận/từ chối lời mời:', error);
-    return res
-      .status(500)
-      .json({ message: 'Lỗi server', error: error.message });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 }
 
@@ -168,7 +163,7 @@ async function getFriendRequests(req, res) {
 
   try {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId không hợp lệ' });
+      return validationError(res, 'userId không hợp lệ');
     }
 
     const requests = await FriendRequest.find({
@@ -198,17 +193,14 @@ async function getFriendRequests(req, res) {
       updatedAt: request.updatedAt,
     }));
 
-    return res.status(200).json({
-      message: body.length
-        ? 'Lấy danh sách lời mời thành công'
-        : 'Không có lời mời nào',
-      body,
-    });
+    return successResponse(
+      res,
+      { body },
+      body.length ? 'Lấy danh sách lời mời thành công' : 'Không có lời mời nào'
+    );
   } catch (error) {
     console.error('❌ Lỗi lấy danh sách lời mời:', error);
-    return res
-      .status(500)
-      .json({ message: 'Lỗi server', error: error.message });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 }
 

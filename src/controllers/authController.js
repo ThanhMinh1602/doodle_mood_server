@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const { sendOTPEmail } = require('../services/emailService');
 const { generateOTP, hashOTP, verifyOTP } = require('../utils/otpUtils');
+const {
+  successResponse,
+  errorResponse,
+  validationError,
+} = require('../utils/responseUtils');
 
 // Hàm kiểm tra dữ liệu đầu vào
 const validateInput = (fields) => {
@@ -15,23 +20,21 @@ exports.register = async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!validateInput([name, email, password])) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập đầy đủ thông tin' });
+      return validationError(res, 'Vui lòng nhập đầy đủ thông tin');
     }
 
     if (await User.findOne({ email })) {
-      return res.status(400).json({ message: 'Email đã tồn tại' });
+      return validationError(res, 'Email đã tồn tại');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({ name, email, password: hashedPassword });
     await newUser.save();
 
-    res.status(201).json({ message: 'Đăng ký thành công' });
+    return successResponse(res, null, 'Đăng ký thành công', 201);
   } catch (error) {
     console.error('Lỗi đăng ký:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };
 
@@ -42,19 +45,17 @@ exports.login = async (req, res) => {
     console.log(req.body);
 
     if (!validateInput([email, password])) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập email và mật khẩu' });
+      return validationError(res, 'Vui lòng nhập email và mật khẩu');
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
+      return validationError(res, 'Sai email hoặc mật khẩu');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
+      return validationError(res, 'Sai email hoặc mật khẩu');
     }
 
     // Cập nhật deviceToken nếu có
@@ -67,18 +68,22 @@ exports.login = async (req, res) => {
       expiresIn: '1h',
     });
 
-    res.status(200).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        deviceToken: user.deviceToken,
+    return successResponse(
+      res,
+      {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+        },
       },
-    });
+      'Đăng nhập thành công'
+    );
   } catch (error) {
     console.error('Lỗi đăng nhập:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };
 
@@ -87,12 +92,12 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     if (!validateInput([email])) {
-      return res.status(400).json({ message: 'Vui lòng nhập email' });
+      return validationError(res, 'Vui lòng nhập email');
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Email không tồn tại' });
+      return validationError(res, 'Email không tồn tại');
     }
 
     const otp = generateOTP();
@@ -103,10 +108,10 @@ exports.forgotPassword = async (req, res) => {
     await sendOTPEmail(email, otp);
     console.log('📧 OTP đã gửi qua email');
 
-    res.status(200).json({ message: 'OTP đã được gửi' });
+    return successResponse(res, null, 'OTP đã được gửi');
   } catch (error) {
     console.error('Lỗi gửi OTP:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };
 
@@ -115,19 +120,17 @@ exports.verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
     if (!validateInput([email, otp])) {
-      return res.status(400).json({ message: 'Thiếu email hoặc OTP' });
+      return validationError(res, 'Thiếu email hoặc OTP');
     }
 
     const user = await User.findOne({ email });
     if (!user || !user.resetOTP || user.resetOTPExpires < Date.now()) {
-      return res
-        .status(400)
-        .json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
+      return validationError(res, 'OTP không hợp lệ hoặc đã hết hạn');
     }
 
     const isOTPValid = await verifyOTP(otp, user.resetOTP);
     if (!isOTPValid) {
-      return res.status(400).json({ message: 'OTP không hợp lệ' });
+      return validationError(res, 'OTP không hợp lệ');
     }
     user.resetOTP = null;
     user.resetOTPExpires = null;
@@ -137,10 +140,10 @@ exports.verifyOTP = async (req, res) => {
       expiresIn: '15m',
     });
 
-    res.status(200).json({ message: 'OTP hợp lệ', resetToken });
+    return successResponse(res, { resetToken }, 'OTP hợp lệ');
   } catch (error) {
     console.error('Lỗi xác minh OTP:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };
 
@@ -149,7 +152,7 @@ exports.resetPassword = async (req, res) => {
   try {
     const { resetToken, newPassword } = req.body;
     if (!validateInput([resetToken, newPassword])) {
-      return res.status(400).json({ message: 'Thiếu token hoặc mật khẩu mới' });
+      return validationError(res, 'Thiếu token hoặc mật khẩu mới');
     }
 
     let decoded;
@@ -157,25 +160,25 @@ exports.resetPassword = async (req, res) => {
       decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
-        return res.status(400).json({ message: 'Token đã hết hạn' });
+        return validationError(res, 'Token đã hết hạn');
       }
       if (error.name === 'JsonWebTokenError') {
-        return res.status(400).json({ message: 'Token không hợp lệ' });
+        return validationError(res, 'Token không hợp lệ');
       }
       throw error;
     }
 
     const user = await User.findById(decoded.id);
     if (!user) {
-      return res.status(400).json({ message: 'Người dùng không tồn tại' });
+      return validationError(res, 'Người dùng không tồn tại');
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
 
-    res.status(200).json({ message: 'Mật khẩu đã được đặt lại' });
+    return successResponse(res, null, 'Mật khẩu đã được đặt lại');
   } catch (error) {
     console.error('Lỗi đặt lại mật khẩu:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };

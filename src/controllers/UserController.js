@@ -1,11 +1,15 @@
 const User = require('../models/user');
+const {
+  successResponse,
+  errorResponse,
+  validationError,
+} = require('../utils/responseUtils');
+
 exports.searchUsers = async (req, res) => {
   try {
     const { query } = req.query; //lấy keywork từ query string
     if (!query) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập từ khoá tìm kiếm' });
+      return validationError(res, 'Vui lòng nhập từ khoá tìm kiếm');
     }
     const users = await User.find({
       $or: [
@@ -14,9 +18,9 @@ exports.searchUsers = async (req, res) => {
       ],
     }).select('name email avt');
 
-    res.status(200).json({ users });
+    return successResponse(res, { users });
   } catch (error) {
     console.error('Lỗi tìm kiếm người dùng:', error);
-    res.status(500).json({ error: 'Lỗi server' });
+    return errorResponse(res, 'Lỗi server', 500, error);
   }
 };

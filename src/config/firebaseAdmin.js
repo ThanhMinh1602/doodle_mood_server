@@ -5,7 +5,7 @@ require('dotenv').config();
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(
-      require('./key/momentsy-55ac3-firebase-adminsdk-fbsvc-cfcffcac93.json')
+      require(process.env.FIREBASE_PRIVATE_KEY)
     ),
   });
 }
