@@ -182,3 +182,25 @@ exports.resetPassword = async (req, res) => {
     return errorResponse(res, 'Lỗi server', 500, error);
   }
 };
+
+exports.logout = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return validationError(res, 'Thiếu userId');
+    }
+
+    //xoá deviceToken
+    const user = await User.findById(userId);
+    if (!user) {
+      return validationError(res, 'Người dùng không tồn tại');
+    }
+    user.deviceToken = null;
+    await user.save();
+
+    return successResponse(res, null, 'Đăng xuất thành công');
+  } catch (error) {
+    console.error('Lỗi đăng xuất:', error);
+    return errorResponse(res, 'Lỗi server', 500, error);
+  }
+};

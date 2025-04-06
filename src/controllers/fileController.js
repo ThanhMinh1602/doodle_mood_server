@@ -118,7 +118,7 @@ async function getImages(req, res) {
       .sort({ uploadedAt: -1 }); // sắp xếp giảm dần theo thời gian
 
     // Định dạng dữ liệu trả về
-    const formattedImages = images.map((image) => ({
+    const body = images.map((image) => ({
       id: image._id,
       fileId: image.fileId,
       fileName: image.fileName,
@@ -129,7 +129,10 @@ async function getImages(req, res) {
       uploadedAt: image.uploadedAt.toISOString(),
     }));
 
-    return successResponse(res, formattedImages);
+    return successResponse(res, {
+      total: images.length,
+      body: body,
+    });
   } catch (error) {
     console.error('❌ Lỗi khi lấy danh sách hình ảnh:', error);
     return errorResponse(res, 'Lỗi server!', 500, error);

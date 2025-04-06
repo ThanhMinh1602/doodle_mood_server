@@ -20,4 +20,6 @@ async function sendNotification(deviceToken, title, body) {
     console.error('❌ Lỗi gửi thông báo FCM:', error);
   }
 }
+
+// Gửi thông báo đẩy với dữ liệu tùy chỉnh và loại thông báo
 module.exports = { sendNotification, MessagingType };

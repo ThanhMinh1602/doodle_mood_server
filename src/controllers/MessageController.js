@@ -1,71 +1,57 @@
 const Message = require('../models/messages');
-const { users } = require('../services/socket/userSocketHandler'); // Lấy danh sách user online
 const { getUserSocketId } = require('../services/socket/userSocketHandler');
 
 async function sendMessage(socket, io) {
-  socket.on('sendMessage', async ({ senderId, receiverId, message }) => {
-    try {
-      const receiverSocketId = getUserSocketId(receiverId);
+  socket.on('sendMessage', async (data) => {
+    const { receiverId, content } = data;
 
-      if (receiverSocketId) {
-        // Lưu tin nhắn vào database
-        const newMessage = new Message({
-          senderId,
-          receiverId,
-          message,
-          status: 'sent',
-        });
-        await newMessage.save();
-
-        // Gửi tin nhắn đến người nhận
-        io.to(receiverSocketId).emit('receiveMessage', {
-          success: true,
-          message: 'Tin nhắn mới',
-          data: {
-            messageId: newMessage._id,
-            senderId,
-            message,
-            timestamp: newMessage.createdAt,
-          },
-          error: null,
-          statusCode: 200,
-        });
-
-        // Xác nhận gửi tin nhắn thành công cho người gửi
-        socket.emit('messageSent', {
-          success: true,
-          message: 'Gửi tin nhắn thành công',
-          data: {
-            messageId: newMessage._id,
-            receiverId,
-            message,
-            timestamp: newMessage.createdAt,
-          },
-          error: null,
-          statusCode: 200,
-        });
-
-        console.log(`📩 Tin nhắn từ ${senderId} đến ${receiverId}: ${message}`);
-      } else {
-        // Người nhận không online
-        socket.emit('messageError', {
-          success: false,
-          message: 'Người nhận không online',
-          data: null,
-          error: 'Receiver is offline',
-          statusCode: 404,
-        });
-        console.log(`⚠️ Người dùng ${receiverId} không online`);
+    // Xác định senderId từ socket
+    let senderId = null;
+    for (let [userId, socketId] of onlineUsers) {
+      if (socketId === socket.id) {
+        senderId = userId;
+        break;
       }
-    } catch (error) {
-      console.error('❌ Lỗi gửi tin nhắn:', error);
-      socket.emit('messageError', {
-        success: false,
-        message: 'Lỗi gửi tin nhắn',
-        data: null,
-        error: error.message,
-        statusCode: 500,
+    }
+
+    if (!senderId) {
+      console.error('❌ Không xác định được senderId từ socket');
+      return;
+    }
+
+    // Tạo message instance
+    const message = new Message({
+      senderId,
+      receiverId,
+      content,
+    });
+
+    const receiverSocketId = getUserSocketId(receiverId);
+
+    try {
+      // Đảm bảo lưu DB và gửi socket nếu online
+      const saveMessagePromise = message.save();
+
+      const sendSocketPromise = new Promise((resolve) => {
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit('receiveMessage', message);
+          console.log(`📩 Gửi tin nhắn socket đến ${receiverId}`);
+        }
+        resolve(); // vẫn resolve nếu offline để không làm lỗi toàn bộ
       });
+
+      // Thực hiện cả 2 promise
+      await Promise.all([saveMessagePromise, sendSocketPromise]);
+      console.log('✅ Tin nhắn đã lưu và xử lý socket xong');
+
+      // Nếu offline thì gửi FCM
+      if (!receiverSocketId) {
+        //để xử lý sau
+      }
+      // Gửi lại cho sender
+      socket.emit('receiveMessage', message);
+    } catch (error) {
+      console.error('❌ Lỗi trong khi xử lý tin nhắn:', error);
     }
   });
 }

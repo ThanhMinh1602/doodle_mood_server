@@ -11,6 +11,7 @@ const {
   validationError,
   notFoundError,
 } = require('../utils/responseUtils');
+const { formatUploadedBy } = require('../utils/formatBody');
 
 const Status = Object.freeze({
   PENDING: 'pending',
@@ -26,6 +27,15 @@ async function sendFriendRequest(req, res) {
     if (!senderId || !receiverId) {
       return validationError(res, 'Thiếu senderId hoặc receiverId');
     }
+
+    // Validate ObjectId format
+    if (
+      !mongoose.Types.ObjectId.isValid(senderId) ||
+      !mongoose.Types.ObjectId.isValid(receiverId)
+    ) {
+      return validationError(res, 'ID người dùng không hợp lệ');
+    }
+
     if (senderId === receiverId) {
       return validationError(res, 'Không thể gửi lời mời cho chính mình');
     }
@@ -195,11 +205,44 @@ async function getFriendRequests(req, res) {
 
     return successResponse(
       res,
-      { body },
+      {
+        total: body.length,
+        body: body,
+      },
       body.length ? 'Lấy danh sách lời mời thành công' : 'Không có lời mời nào'
     );
   } catch (error) {
     console.error('❌ Lỗi lấy danh sách lời mời:', error);
+    return errorResponse(res, 'Lỗi server', 500, error);
+  }
+}
+async function getFriendsListById(req, res) {
+  const { userId } = req.params;
+
+  try {
+    if (!userId) {
+      return validationError(res, 'Thiếu userId');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return validationError(res, 'userId không hợp lệ');
+    }
+
+    const users = await User.findById(userId).populate(
+      'friends',
+      'id name email avatar'
+    );
+
+    if (!users) {
+      return validationError(res, 'Không tìm thấy user');
+    }
+
+    const body = users.friends.map((user) => formatUploadedBy(user));
+    return successResponse(res, {
+      body: body,
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách friend', error);
     return errorResponse(res, 'Lỗi server', 500, error);
   }
 }
@@ -208,4 +251,5 @@ module.exports = {
   sendFriendRequest,
   acceptFriendRequest,
   getFriendRequests,
+  getFriendsListById,
 };

@@ -4,8 +4,9 @@ const {
   errorResponse,
   validationError,
 } = require('../utils/responseUtils');
+const { formatUploadedBy } = require('../utils/formatBody');
 
-exports.searchUsers = async (req, res) => {
+async function searchUsers(req, res) {
   try {
     const { query } = req.query; //lấy keywork từ query string
     if (!query) {
@@ -23,4 +24,19 @@ exports.searchUsers = async (req, res) => {
     console.error('Lỗi tìm kiếm người dùng:', error);
     return errorResponse(res, 'Lỗi server', 500, error);
   }
+}
+async function getUserById(req, res) {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    const userFormat = formatUploadedBy(user);
+    return successResponse(res, userFormat);
+  } catch (error) {
+    console.error('Lỗi lấy thông tin người dùng:', error);
+    return errorResponse(res, 'Lỗi server', 500, error);
+  }
+}
+module.exports = {
+  searchUsers,
+  getUserById,
 };
