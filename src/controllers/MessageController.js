@@ -1,111 +1,69 @@
 const Message = require('../models/messages');
-const {
-  getUserSocketId,
-  onlineUsers,
-} = require('../services/socket/userSocketHandler'); // Thêm onlineUsers vào import
 
-async function sendMessage(socket, io) {
-  socket.on('sendMessage', async (data) => {
-    const { receiverId, content } = data;
+async function getConversation(req, res) {
+  const { user1Id, user2Id } = req.params;
 
-    // Xác định senderId từ socket
-    let senderId = null;
-    for (let [userId, socketId] of onlineUsers) {
-      if (socketId === socket.id) {
-        senderId = userId;
-        break;
-      }
-    }
+  try {
+    const body = await Message.find({
+      $or: [
+        { senderId: user1Id, receiverId: user2Id },
+        { senderId: user2Id, receiverId: user1Id },
+      ],
+    }).sort({ timestamp: 1 });
 
-    if (!senderId) {
-      console.error('❌ Không xác định được senderId từ socket');
-      return;
-    }
+    return res.status(200).json({
+      success: true,
+      message: 'Lấy tin nhắn thành công',
+      data: {
+        body: body.map((message) => ({
+          id: message._id,
+          senderId: message.senderId,
+          receiverId: message.receiverId,
+          content: message.content,
+          timestamp: message.timestamp,
+        })),
+        total: body.length,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Lỗi lấy tin nhắn:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy tin nhắn',
+    });
+  }
+}
 
-    // Tạo message instance
-    const message = new Message({
+async function handleSendMessage(io, socket, data) {
+  const { senderId, receiverId, content } = data;
+
+  if (!senderId || !receiverId || !content) {
+    return socket.emit('error', 'Thiếu thông tin tin nhắn');
+  }
+
+  try {
+    const newMessage = await Message.create({ senderId, receiverId, content });
+
+    const payload = {
+      id: newMessage._id,
       senderId,
       receiverId,
       content,
-    });
+      timestamp: newMessage.timestamp,
+    };
 
-    const receiverSocketId = getUserSocketId(receiverId);
+    // Gửi tới người nhận
+    io.to(receiverId).emit('newMessage', payload);
 
-    try {
-      // Đảm bảo lưu DB và gửi socket nếu online
-      const saveMessagePromise = message.save();
-
-      const sendSocketPromise = new Promise((resolve) => {
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit('receiveMessage', message);
-          console.log(`📩 Gửi tin nhắn socket đến ${receiverId}`);
-        }
-        resolve(); // vẫn resolve nếu offline để không làm lỗi toàn bộ
-      });
-
-      // Thực hiện cả 2 promise
-      await Promise.all([saveMessagePromise, sendSocketPromise]);
-      console.log('✅ Tin nhắn đã lưu và xử lý socket xong');
-
-      // Nếu offline thì gửi FCM
-      if (!receiverSocketId) {
-        // để xử lý sau
-      }
-      // Gửi lại cho sender
-      socket.emit('receiveMessage', message);
-    } catch (error) {
-      console.error('❌ Lỗi trong khi xử lý tin nhắn:', error);
-    }
-  });
+    // Gửi lại cho người gửi (xác nhận)
+    socket.emit('newMessage', payload);
+  } catch (error) {
+    console.error('❌ Lỗi xử lý sendMessage socket:', error);
+    socket.emit('error', 'Lỗi gửi tin nhắn');
+  }
 }
 
-async function getMessages(socket, io) {
-  socket.on('getMessages', async (data) => {
-    const { otherUserId } = data;
-
-    // Xác định senderId từ socket
-    let currentUserId = null;
-    for (let [userId, socketId] of onlineUsers) {
-      if (socketId === socket.id) {
-        currentUserId = userId;
-        break;
-      }
-    }
-
-    if (!currentUserId) {
-      console.error('❌ Không xác định được currentUserId từ socket');
-      socket.emit('error', { message: 'Không thể xác định người dùng' });
-      return;
-    }
-
-    try {
-      // Lấy tất cả tin nhắn giữa hai người dùng
-      const messages = await Message.find({
-        $or: [
-          { senderId: currentUserId, receiverId: otherUserId },
-          { senderId: otherUserId, receiverId: currentUserId },
-        ],
-      })
-        .sort({ createdAt: 1 }) // Sắp xếp theo thời gian tăng dần
-        .lean(); // Chuyển thành plain JavaScript object
-
-      // Gửi danh sách tin nhắn về client
-      socket.emit('messageHistory', {
-        messages,
-        otherUserId,
-      });
-
-      console.log(
-        `✅ Đã gửi lịch sử tin nhắn giữa ${currentUserId} và ${otherUserId}`
-      );
-    } catch (error) {
-      console.error('❌ Lỗi khi lấy tin nhắn:', error);
-      socket.emit('error', {
-        message: 'Lỗi khi lấy tin nhắn',
-        error: error.message,
-      });
-    }
-  });
-}
-
-module.exports = { sendMessage, getMessages };
+module.exports = {
+  handleSendMessage,
+  getConversation,
+};
