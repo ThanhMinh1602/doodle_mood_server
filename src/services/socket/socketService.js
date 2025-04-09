@@ -2,8 +2,6 @@ const socketIo = require('socket.io');
 const { registerUser, handleDisconnect } = require('./userSocketHandler');
 const { sendMessage } = require('../../controllers/MessageController');
 
-let io;
-
 function initSocket(server) {
   io = socketIo(server, {
     cors: {
@@ -13,7 +11,20 @@ function initSocket(server) {
   });
 
   io.on('connection', (socket) => {
-    console.log('🟢 Người dùng kết nối:', socket.id);
+    const userId = socket.handshake.query.userId;
+    console.log(
+      '🟢 Người dùng kết nối với socket id:',
+      socket.id,
+      ' + ',
+      'userID:',
+      userId
+    );
+    if (!userId) {
+      console.log('❌ Thiếu userId khi kết nối');
+      return socket.disconnect();
+    }
+
+    socket.join(userId);
 
     // Đăng ký user online
     registerUser(socket);

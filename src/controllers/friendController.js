@@ -18,21 +18,20 @@ const Status = Object.freeze({
   ACCEPTED: 'accepted',
   REJECTED: 'rejected',
 });
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-// Gửi lời mời kết bạn
+//=================== Gửi lời mời kết bạn ====================\\
 async function sendFriendRequest(req, res) {
   const { senderId, receiverId } = req.body;
+  const io = req.app.get('io');
 
   try {
+    // 1. Kiểm tra đầu vào
     if (!senderId || !receiverId) {
       return validationError(res, 'Thiếu senderId hoặc receiverId');
     }
 
-    // Validate ObjectId format
-    if (
-      !mongoose.Types.ObjectId.isValid(senderId) ||
-      !mongoose.Types.ObjectId.isValid(receiverId)
-    ) {
+    if (!isValidObjectId(senderId) || !isValidObjectId(receiverId)) {
       return validationError(res, 'ID người dùng không hợp lệ');
     }
 
@@ -40,53 +39,66 @@ async function sendFriendRequest(req, res) {
       return validationError(res, 'Không thể gửi lời mời cho chính mình');
     }
 
+    // 2. Tìm người dùng
     const [sender, receiver] = await Promise.all([
       User.findById(senderId),
       User.findById(receiverId),
     ]);
-
     if (!sender || !receiver) {
       return notFoundError(res, 'Người dùng không tồn tại');
     }
 
-    if (
-      sender.friends.includes(receiverId) ||
-      receiver.friends.includes(senderId)
-    ) {
+    // 3. Kiểm tra quan hệ bạn bè
+    if (sender.friends.includes(receiverId)) {
       return validationError(res, 'Hai người đã là bạn bè!');
     }
 
-    const existingRequest = await FriendRequest.findOne({
+    const isExist = await FriendRequest.exists({
       senderId,
       receiverId,
       status: Status.PENDING,
     });
-
-    if (existingRequest) {
+    if (isExist) {
       return validationError(res, 'Bạn đã gửi lời mời trước đó!');
     }
 
-    const newFriendRequest = new FriendRequest({ senderId, receiverId });
+    // 4. Lưu lời mời và gửi thông báo
+    const newRequest = new FriendRequest({ senderId, receiverId });
 
-    // Dùng Promise.all để đảm bảo cả lưu vào DB và gửi thông báo phải thành công
-    await Promise.all([
-      newFriendRequest.save(),
-      sendNotification(
-        receiver.deviceToken,
-        'Lời mời kết bạn',
-        `${sender.name} đã gửi cho bạn một lời mời kết bạn!`
-      ),
-    ]).catch(async (error) => {
-      console.error('❌ Lỗi trong quá trình gửi lời mời:', error);
-
-      // Nếu có lỗi, xóa lời mời đã lưu (nếu có)
-      await FriendRequest.findByIdAndDelete(newFriendRequest._id);
+    try {
+      await Promise.all([
+        newRequest.save(),
+        sendNotification(
+          receiver.deviceToken,
+          'Lời mời kết bạn',
+          `${sender.name} đã gửi cho bạn một lời mời kết bạn!`
+        ).then((_) => {
+          // 5. Gửi socket event
+          io.to(receiverId).emit('friendRequest', {
+            id: newRequest._id,
+            senderBy: {
+              id: sender._id,
+              name: sender.name,
+              email: sender.email,
+              avatar: sender.avatar,
+            },
+            receiverId,
+            status: Status.PENDING,
+            createdAt: newRequest.createdAt,
+            updatedAt: newRequest.updatedAt,
+          });
+        }),
+      ]);
+    } catch (err) {
+      await FriendRequest.findByIdAndDelete(newRequest._id);
+      console.error('❌ Gửi lời mời thất bại:', err);
       throw new Error('Gửi lời mời kết bạn thất bại!');
-    });
+    }
 
+    // 6. Phản hồi client
     return successResponse(
       res,
-      { requestId: newFriendRequest._id },
+      { requestId: newRequest._id },
       'Gửi lời mời kết bạn thành công!',
       201
     );
@@ -96,7 +108,7 @@ async function sendFriendRequest(req, res) {
   }
 }
 
-// Chấp nhận hoặc từ chối lời mời kết bạn
+//=================== Chấp nhận hoặc từ chối lời mời kết bạn ===================\\
 async function acceptFriendRequest(req, res) {
   const { requestId, receiverId, status } = req.body;
 
@@ -167,7 +179,7 @@ async function acceptFriendRequest(req, res) {
   }
 }
 
-// Lấy danh sách lời mời kết bạn
+//=================== Lấy danh sách lời mời kết bạn ===================\\
 async function getFriendRequests(req, res) {
   const { userId } = req.params;
 

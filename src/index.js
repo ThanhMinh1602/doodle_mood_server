@@ -8,7 +8,6 @@ const connectDB = require('./config/db');
 const { initSocket } = require('./services/socket/socketService');
 
 const app = express();
-
 // Kết nối database
 connectDB();
 
@@ -28,7 +27,8 @@ app.use('/api/chat', require('./routes/messageRouter'));
 
 // Tạo server và khởi tạo Socket
 const server = http.createServer(app);
-initSocket(server);
+const io = initSocket(server);
+app.set('io', io);
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;
