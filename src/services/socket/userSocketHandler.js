@@ -18,18 +18,14 @@ function handleDisconnect(socket) {
     }
   });
 }
-
 function getUserSocketId(userId) {
   return onlineUsers.get(userId);
-}
-
-function isUserOnline(userId) {
-  return onlineUsers.has(userId);
 }
 
 module.exports = {
   registerUser,
   handleDisconnect,
   getUserSocketId,
-  isUserOnline,
+  // isUserOnline,
+  onlineUsers, // Export onlineUsers để sử dụng ở nơi khác
 };

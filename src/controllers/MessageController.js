@@ -1,5 +1,8 @@
 const Message = require('../models/messages');
-const { getUserSocketId } = require('../services/socket/userSocketHandler');
+const {
+  getUserSocketId,
+  onlineUsers,
+} = require('../services/socket/userSocketHandler'); // Thêm onlineUsers vào import
 
 async function sendMessage(socket, io) {
   socket.on('sendMessage', async (data) => {
@@ -46,7 +49,7 @@ async function sendMessage(socket, io) {
 
       // Nếu offline thì gửi FCM
       if (!receiverSocketId) {
-        //để xử lý sau
+        // để xử lý sau
       }
       // Gửi lại cho sender
       socket.emit('receiveMessage', message);
@@ -56,4 +59,53 @@ async function sendMessage(socket, io) {
   });
 }
 
-module.exports = { sendMessage };
+async function getMessages(socket, io) {
+  socket.on('getMessages', async (data) => {
+    const { otherUserId } = data;
+
+    // Xác định senderId từ socket
+    let currentUserId = null;
+    for (let [userId, socketId] of onlineUsers) {
+      if (socketId === socket.id) {
+        currentUserId = userId;
+        break;
+      }
+    }
+
+    if (!currentUserId) {
+      console.error('❌ Không xác định được currentUserId từ socket');
+      socket.emit('error', { message: 'Không thể xác định người dùng' });
+      return;
+    }
+
+    try {
+      // Lấy tất cả tin nhắn giữa hai người dùng
+      const messages = await Message.find({
+        $or: [
+          { senderId: currentUserId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: currentUserId },
+        ],
+      })
+        .sort({ createdAt: 1 }) // Sắp xếp theo thời gian tăng dần
+        .lean(); // Chuyển thành plain JavaScript object
+
+      // Gửi danh sách tin nhắn về client
+      socket.emit('messageHistory', {
+        messages,
+        otherUserId,
+      });
+
+      console.log(
+        `✅ Đã gửi lịch sử tin nhắn giữa ${currentUserId} và ${otherUserId}`
+      );
+    } catch (error) {
+      console.error('❌ Lỗi khi lấy tin nhắn:', error);
+      socket.emit('error', {
+        message: 'Lỗi khi lấy tin nhắn',
+        error: error.message,
+      });
+    }
+  });
+}
+
+module.exports = { sendMessage, getMessages };

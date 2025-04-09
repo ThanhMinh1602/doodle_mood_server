@@ -2,6 +2,8 @@ const socketIo = require('socket.io');
 const { registerUser, handleDisconnect } = require('./userSocketHandler');
 const { sendMessage } = require('../../controllers/MessageController');
 
+let io;
+
 function initSocket(server) {
   io = socketIo(server, {
     cors: {
@@ -15,8 +17,9 @@ function initSocket(server) {
 
     // Đăng ký user online
     registerUser(socket);
-    // Xử lý ngắt kết nối
+    // Xử lý gửi tin nhắn
     sendMessage(socket, io);
+    // Xử lý ngắt kết nối
     handleDisconnect(socket);
   });
 
