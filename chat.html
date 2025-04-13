@@ -1,187 +1,81 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ứng dụng Chat</title>
+        <title>Socket.IO Chat Test</title>
         <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
+            body {
                 font-family: Arial, sans-serif;
-            }
-
-            .container {
-                display: flex;
-                height: 100vh;
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-
-            .sidebar {
-                width: 300px;
-                background: #f5f5f5;
                 padding: 20px;
-                border-right: 1px solid #ddd;
             }
 
-            .chat-area {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .user-list {
-                list-style: none;
-            }
-
-            .user-list li {
+            #chat {
+                border: 1px solid #ccc;
                 padding: 10px;
-                margin: 5px 0;
-                background: #fff;
-                border-radius: 5px;
-                cursor: pointer;
+                height: 300px;
+                overflow-y: scroll;
+                margin-bottom: 10px;
             }
 
-            .user-list li.online {
-                border-left: 4px solid #2ecc71;
-            }
-
-            .messages {
-                flex: 1;
-                padding: 20px;
-                overflow-y: auto;
-                background: #fff;
-            }
-
-            .message {
-                margin: 10px 0;
-                padding: 10px;
-                border-radius: 5px;
-                max-width: 70%;
-            }
-
-            .message.sent {
-                background: #3498db;
-                color: white;
-                margin-left: auto;
-            }
-
-            .message.received {
-                background: #ecf0f1;
-            }
-
-            .message-form {
-                padding: 20px;
-                border-top: 1px solid #ddd;
+            #message-form {
                 display: flex;
                 gap: 10px;
-            }
-
-            .message-input {
-                flex: 1;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                outline: none;
-            }
-
-            .send-btn {
-                padding: 10px 20px;
-                background: #2ecc71;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-            }
-
-            .send-btn:hover {
-                background: #27ae60;
             }
         </style>
     </head>
 
     <body>
-        <div class="container">
-            <!-- Sidebar với danh sách người dùng -->
-            <div class="sidebar">
-                <h2>Danh sách người dùng</h2>
-                <ul class="user-list" id="userList">
-                    <!-- Danh sách người dùng sẽ được thêm bằng JavaScript -->
-                </ul>
-            </div>
+        <h2>Socket.IO Chat Test</h2>
+        <div id="chat"></div>
+        <form id="message-form">
+            <input type="text" id="receiverId" placeholder="Receiver ID" required>
+            <input type="text" id="content" placeholder="Type your message" required>
+            <button type="submit">Send</button>
+        </form>
 
-            <!-- Khu vực chat -->
-            <div class="chat-area">
-                <div class="messages" id="messageArea">
-                    <!-- Tin nhắn sẽ được thêm bằng JavaScript -->
-                </div>
-                <form class="message-form" id="messageForm">
-                    <input type="text" class="message-input" id="messageInput" placeholder="Nhập tin nhắn..."
-                        autocomplete="off">
-                    <button type="submit" class="send-btn">Gửi</button>
-                </form>
-            </div>
-        </div>
-
-        <script src="/socket.io/socket.io.js"></script>
+        <!-- Thêm thư viện Socket.IO client -->
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
         <script>
-            const socket = io('http://192.168.0.119:3000'); // Thay bằng URL server của bạn
-            const messageForm = document.getElementById('messageForm');
-            const messageInput = document.getElementById('messageInput');
-            const messageArea = document.getElementById('messageArea');
-            const userList = document.getElementById('userList');
+            // Kết nối đến server Socket.IO
+            const socket = io('http://localhost:3000'); // Thay đổi URL nếu server chạy ở port khác
 
-            // Đăng ký user (thay 'user123' bằng userId thực tế từ auth)
-            socket.emit('register', 'user123');
+            // Khi kết nối thành công
+            socket.on('connect', () => {
+                console.log('Connected to server with socket ID:', socket.id);
+                addMessageToChat('System', 'Connected to server!');
+            });
+
+            // Lắng nghe tin nhắn từ server
+            socket.on('receiveMessage', (message) => {
+                console.log('Received message:', message);
+                addMessageToChat(message.senderId, message.content);
+            });
 
             // Xử lý gửi tin nhắn
-            messageForm.addEventListener('submit', (e) => {
+            const form = document.getElementById('message-form');
+            form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const content = messageInput.value.trim();
-                if (content) {
-                    const messageData = {
-                        senderId: 'user123', // Thay bằng senderId thực tế
-                        receiverId: 'user456', // Thay bằng receiverId thực tế
-                        content: content
-                    };
-                    socket.emit('sendMessage', messageData);
-                    messageInput.value = '';
-                }
+                const receiverId = document.getElementById('receiverId').value;
+                const content = document.getElementById('content').value;
+
+                // Gửi sự kiện sendMessage đến server
+                socket.emit('sendMessage', { receiverId, content });
+                console.log('Sent message:', { receiverId, content });
+
+                // Reset input nội dung
+                document.getElementById('content').value = '';
             });
 
-            // Nhận tin nhắn
-            socket.on('receiveMessage', (message) => {
-                const messageElement = document.createElement('div');
-                messageElement.classList.add('message');
-                messageElement.classList.add(
-                    message.senderId === 'user123' ? 'sent' : 'received'
-                );
-                messageElement.textContent = message.content;
-                messageArea.appendChild(messageElement);
-                messageArea.scrollTop = messageArea.scrollHeight;
-            });
-
-            // Cập nhật danh sách người dùng (ví dụ)
-            function updateUserList(users) {
-                userList.innerHTML = '';
-                // Ví dụ danh sách người dùng tĩnh
-                const sampleUsers = [
-                    { id: 'user123', online: true },
-                    { id: 'user456', online: false }
-                ];
-                sampleUsers.forEach(user => {
-                    const li = document.createElement('li');
-                    li.textContent = user.id;
-                    if (user.online) li.classList.add('online');
-                    userList.appendChild(li);
-                });
+            // Hàm hiển thị tin nhắn lên giao diện
+            function addMessageToChat(sender, content) {
+                const chatDiv = document.getElementById('chat');
+                const messageDiv = document.createElement('div');
+                messageDiv.textContent = `${sender}: ${content}`;
+                chatDiv.appendChild(messageDiv);
+                chatDiv.scrollTop = chatDiv.scrollHeight; // Tự động scroll xuống dưới
             }
-
-            // Gọi lần đầu để hiển thị danh sách người dùng
-            updateUserList();
         </script>
     </body>
 

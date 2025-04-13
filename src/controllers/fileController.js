@@ -9,12 +9,20 @@ const {
   validationError,
   notFoundError,
 } = require('../utils/responseUtils');
+// Enum-like structure cho fileType
+const FileType = Object.freeze({
+  AVATAR: 'avatar',
+  STORY: 'story',
+});
+
 
 //  Upload file lên Google Drive
-async function uploadFileToDrive(filePath, fileName) {
+async function uploadFileToDrive(filePath, fileName, FileType) {
+  // Kiểm tra file có tồn tại không
+
   const fileMetadata = {
     name: fileName,
-    parents: process.env.FOLDER_ID ? [process.env.FOLDER_ID] : [],
+    parents: FileType.avatar ? ['UserAvatar'] :  FileType.story ? [] : [], // ID của thư mục trên Google Drive
   };
 
   const media = {
@@ -58,26 +66,37 @@ async function uploadFileToDrive(filePath, fileName) {
     return { success: false, error: error.message };
   }
 }
-
 // Upload file + Lưu thông tin người tải lên
 async function uploadFile(req, res) {
+  // Kiểm tra xem file có được upload không
   if (!req.file) {
     return validationError(res, 'No file uploaded');
   }
 
+  // Kiểm tra xem có userId không
   if (!req.body.userId) {
     return validationError(res, 'Missing userId');
+  }
+
+  // Kiểm tra xem có fileType không (avatar hay story)
+  const { fileType } = req.body;
+  
+  if (!fileType || !Object.values(FileType).includes(fileType)) {
+    return validationError(res, `Invalid fileType. It should be one of the following: ${Object.values(FileType).join(', ')}`);
   }
 
   const { userId } = req.body;
   console.log('📂 File path:', req.file.path);
   console.log('📄 File name:', req.file.originalname);
   console.log('👤 Uploaded by:', userId);
+  console.log('📄 File type:', fileType);
 
-  const result = await uploadFileToDrive(req.file.path, req.file.originalname);
+  // Gọi hàm uploadFileToDrive, truyền thêm tham số `fileType`
+  const result = await uploadFileToDrive(req.file.path, req.file.originalname, fileType);
 
   if (result.success) {
     try {
+      // Tạo mới một document Image trong MongoDB
       const newImage = new Image({
         fileId: result.fileId,
         fileName: req.file.originalname,
@@ -85,10 +104,11 @@ async function uploadFile(req, res) {
         viewLink: result.viewLink,
         downloadLink: result.downloadLink,
         uploadedBy: userId,
+        fileType: fileType,  // Thêm loại file (avatar/story)
       });
 
       await newImage.save();
-      return successResponse(res, { image: newImage }, 'Upload thành công!');
+      return successResponse(res, { body: newImage }, 'Upload thành công!');
     } catch (error) {
       console.error('❌ Lỗi khi lưu vào MongoDB:', error);
       return errorResponse(res, 'Lỗi khi lưu vào DB', 500, error);
@@ -97,6 +117,7 @@ async function uploadFile(req, res) {
     return errorResponse(res, 'Upload thất bại', 500, result.error);
   }
 }
+
 
 // Lấy danh sách hình ảnh của bạn bè và chính user
 async function getImages(req, res) {
@@ -167,4 +188,5 @@ module.exports = {
   uploadFile,
   getImages,
   getImagesByDrive,
+  uploadFileToDrive,
 };
