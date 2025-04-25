@@ -74,7 +74,7 @@ async function sendFriendRequest(req, res) {
           `${sender.name} đã gửi cho bạn một lời mời kết bạn!`
         ).then((_) => {
           // 5. Gửi socket event
-          io.to(receiverId).emit('friendRequest', {
+          io.to(receiverId).emit('friend_request', {
             id: newRequest._id,
             senderBy: {
               id: sender._id,

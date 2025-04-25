@@ -15,10 +15,10 @@ const upload = multer({ dest: uploadDir });
 
 const router = express.Router();
 
-// ✅ Route upload file
+//Route upload file
 router.post('/file-upload', upload.single('file'), uploadFile);
 
-// ✅ Route lấy danh sách hình ảnh
+//Route lấy danh sách hình ảnh
 router.get('/list-images/:userId', getImages);
 
 module.exports = router;

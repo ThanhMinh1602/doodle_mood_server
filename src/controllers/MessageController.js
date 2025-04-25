@@ -1,17 +1,11 @@
 const Message = require('../models/messages');
 const mongoose = require('mongoose');
-const {
-  sendNotification,
-} = require('../services/firebase/notification_service');
 const { formatToVietnamTime } = require('../utils/timeUtils');
 const {
   successResponse,
   errorResponse,
-  validationError,
-  notFoundError,
 } = require('../utils/responseUtils');
 const { formatUploadedBy } = require('../utils/formatBody');
-const User = require('../models/user');
 //get message by user1Id and user2Id
 async function getConversation(req, res) {
   const { user1Id, user2Id } = req.params;
@@ -47,41 +41,6 @@ async function getConversation(req, res) {
   }
 }
 
-//send message
-async function handleSendMessage(io, socket, data) {
-  const { senderId, receiverId, content } = data;
-
-  if (!senderId || !receiverId || !content) {
-    return socket.emit('error', 'Thiếu thông tin tin nhắn');
-  }
-
-  try {
-    const newMessage = await Message.create({
-      senderId,
-      receiverId,
-      content,
-      timestamp: formatToVietnamTime(Date.now()),
-    });
-    const user = await User.findById(receiverId);
-
-    const payload = {
-      id: newMessage._id,
-      senderId,
-      receiverId,
-      content,
-      timestamp: newMessage.timestamp,
-    };
-    sendNotification(user.deviceToken, user.name, content);
-    // Gửi tới người nhận
-    io.to(receiverId).emit('newMessage', payload);
-
-    // Gửi lại cho người gửi (xác nhận)
-    socket.emit('newMessage', payload);
-  } catch (error) {
-    console.error('❌ Lỗi xử lý sendMessage socket:', error);
-    socket.emit('error', 'Lỗi gửi tin nhắn');
-  }
-}
 
 async function getConversationList(req, res) {
   const { userId } = req.params;
@@ -168,7 +127,6 @@ async function getConversationList(req, res) {
 }
 
 module.exports = {
-  handleSendMessage,
   getConversation,
   getConversationList,
 };

@@ -5,7 +5,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const http = require('http');
 const connectDB = require('./config/db');
-const { initSocket } = require('./services/socket/socketService');
+const { initSocket } = require('./services/sockets/index');
+const os = require('os');
+
 
 const app = express();
 // Kết nối database
@@ -32,4 +34,21 @@ app.set('io', io);
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Server chạy trên cổng ${PORT}`));
+const interfaces = os.networkInterfaces();
+
+// Tìm địa chỉ IP cục bộ
+function getLocalExternalIP() {
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+const localIP = getLocalExternalIP();
+server.listen(PORT, () => {
+    console.log(`🚀 Server chạy tại: http://${localIP}:${PORT}`);
+  });

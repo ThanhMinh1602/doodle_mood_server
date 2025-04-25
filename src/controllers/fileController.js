@@ -15,14 +15,13 @@ const FileType = Object.freeze({
   STORY: 'story',
 });
 
-
 //  Upload file lên Google Drive
 async function uploadFileToDrive(filePath, fileName, FileType) {
   // Kiểm tra file có tồn tại không
 
   const fileMetadata = {
     name: fileName,
-    parents: FileType.avatar ? ['UserAvatar'] :  FileType.story ? [] : [], // ID của thư mục trên Google Drive
+    parents: FileType.avatar ? ['UserAvatar'] : FileType.story ? [] : [], // ID của thư mục trên Google Drive
   };
 
   const media = {
@@ -68,7 +67,6 @@ async function uploadFileToDrive(filePath, fileName, FileType) {
 }
 // Upload file + Lưu thông tin người tải lên
 async function uploadFile(req, res) {
-  // Kiểm tra xem file có được upload không
   if (!req.file) {
     return validationError(res, 'No file uploaded');
   }
@@ -80,9 +78,14 @@ async function uploadFile(req, res) {
 
   // Kiểm tra xem có fileType không (avatar hay story)
   const { fileType } = req.body;
-  
+
   if (!fileType || !Object.values(FileType).includes(fileType)) {
-    return validationError(res, `Invalid fileType. It should be one of the following: ${Object.values(FileType).join(', ')}`);
+    return validationError(
+      res,
+      `Invalid fileType. It should be one of the following: ${Object.values(
+        FileType
+      ).join(', ')}`
+    );
   }
 
   const { userId } = req.body;
@@ -92,7 +95,11 @@ async function uploadFile(req, res) {
   console.log('📄 File type:', fileType);
 
   // Gọi hàm uploadFileToDrive, truyền thêm tham số `fileType`
-  const result = await uploadFileToDrive(req.file.path, req.file.originalname, fileType);
+  const result = await uploadFileToDrive(
+    req.file.path,
+    req.file.originalname,
+    fileType
+  );
 
   if (result.success) {
     try {
@@ -104,7 +111,7 @@ async function uploadFile(req, res) {
         viewLink: result.viewLink,
         downloadLink: result.downloadLink,
         uploadedBy: userId,
-        fileType: fileType,  // Thêm loại file (avatar/story)
+        fileType: fileType,
       });
 
       await newImage.save();
@@ -117,7 +124,6 @@ async function uploadFile(req, res) {
     return errorResponse(res, 'Upload thất bại', 500, result.error);
   }
 }
-
 
 // Lấy danh sách hình ảnh của bạn bè và chính user
 async function getImages(req, res) {
